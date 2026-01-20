@@ -51,8 +51,8 @@ class ManageIQ::Providers::IbmPowerHmc::Inventory::Parser::InfraManager < Manage
         :ipaddress           => sys["IPAddress"],
         :power_state         => lookup_power_state(sys["State"]),
         :vmm_vendor          => "ibm_power_hmc",
-        :vmm_version     => [collector.hmc.version, collector.hmc.sp_name].compact.join(' '),
-        :vmm_buildnumber => collector.hmc.build_level
+        :vmm_version         => [collector.hmc.version, collector.hmc.sp_name].compact.join(' '),
+        :vmm_buildnumber     => collector.hmc.build_level
       )
       persister.host_operating_systems.build(
         :host         => host,
