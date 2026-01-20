@@ -98,11 +98,13 @@ describe ManageIQ::Providers::IbmPowerHmc::InfraManager::Refresher do
   def assert_specific_host
     host = ems.hosts.find_by(:ems_ref => host_uuid)
     expect(host).to have_attributes(
-      :ems_ref     => host_uuid,
-      :name        => "porthos",
-      :ipaddress   => "10.197.64.46",
-      :power_state => "on",
-      :vmm_vendor  => "ibm_power_hmc"
+      :ems_ref         => host_uuid,
+      :name            => "porthos",
+      :ipaddress       => "10.197.64.46",
+      :power_state     => "on",
+      :vmm_vendor      => "ibm_power_hmc",
+      :vmm_version     => "V8R8.6.0 0",
+      :vmm_buildnumber => "20161101.1"
     )
     expect(host.operating_system).to have_attributes(
       :product_name => "IBM PowerVM hypervisor (PHYP)",
