@@ -104,7 +104,8 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
 
   def verify_credentials(_auth_type = nil, _options = {})
     begin
-      connect(:validate => true)
+      connection = connect(:validate => true)
+      fetch_and_store_hmc_version(connection)
     rescue => err
       raise MiqException::MiqInvalidCredentialsError, err.message
     end
@@ -149,7 +150,92 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
   end
 
   def console_url
-    "https://#{hostname}/dashboard/"
+    $ibm_power_hmc_log.info("#{self.class}##{__method__}: Generating console URL for HMC '#{hostname}'")
+    dashboard_path = use_new_dashboard? ? "newdashboard" : "dashboard"
+    "https://#{hostname}/#{dashboard_path}/"
+  end
+
+  private
+
+  def use_new_dashboard?
+    hmc_version_string = hmc_version_from_options
+    return false if hmc_version_string.blank?
+
+    begin
+      current_version = parse_hmc_version(hmc_version_string)
+      threshold_version = parse_hmc_version("V10R2 1020")
+      current_version >= threshold_version
+    rescue ArgumentError
+      # If version parsing fails, default to old dashboard
+      $ibm_power_hmc_log.warn("Failed to parse HMC version '#{hmc_version_string}' for dashboard comparison")
+      false
+    end
+  end
+
+  def parse_hmc_version(version_string)
+    # Handle IBM HMC version formats:
+    # - Numeric: "10.2.1030.0" -> [10, 2, 1030, 0]
+    # - IBM format: "V11R1 1110" -> [11, 1, 1110]
+    # - IBM format: "V10R2 1020" -> [10, 2, 1020]
+    
+    version_string = version_string.to_s.strip
+    
+    if version_string.match?(/^V\d+R\d+/)
+      # IBM format: extract numbers from "V<major>R<minor> <build>"
+      # e.g., "V11R1 1110" -> "11.1.1110"
+      match = version_string.match(/V(\d+)R(\d+)\s*(\d+)?/)
+      if match
+        parts = [match[1].to_i, match[2].to_i]
+        parts << match[3].to_i if match[3]
+        Gem::Version.new(parts.join("."))
+      else
+        raise ArgumentError, "Invalid IBM HMC version format: #{version_string}"
+      end
+    else
+      # Standard numeric format: "10.2.1030.0"
+      Gem::Version.new(version_string)
+    end
+  end
+
+  def fetch_and_store_hmc_version(connection)
+    $ibm_power_hmc_log.info("#{self.class}##{__method__}: Fetching HMC version for '#{hostname}', checking for connection")
+    return unless connection
+    $ibm_power_hmc_log.info("#{self.class}##{__method__}: Connection established, fetching HMC version")
+    begin
+      hmc_console = connection.management_console
+      $ibm_power_hmc_log.info("#{self.class}##{__method__}: Management console obtained, retrieving version '#{hmc_console}")
+      
+      # HMC version is split across two attributes:
+      # - hmc_console.version contains release (e.g., "V11R1")
+      # - hmc_console.sp_name contains service pack/build (e.g., "1110")
+      version_part = hmc_console.version if hmc_console.respond_to?(:version)
+      sp_part = hmc_console.sp_name if hmc_console.respond_to?(:sp_name)
+      
+      # Combine both parts to form complete version (e.g., "V11R1 1110")
+      hmc_version = if version_part.present? && sp_part.present?
+                      "#{version_part} #{sp_part}"
+                    elsif version_part.present?
+                      $ibm_power_hmc_log.warn("#{self.class}##{__method__}: SP part missing, using version part only")
+                      version_part
+                    elsif sp_part.present?
+                      $ibm_power_hmc_log.warn("#{self.class}##{__method__}: Version part missing, using SP part only")
+                      sp_part
+                    end
+      $ibm_power_hmc_log.info("#{self.class}##{__method__}: Fetched HMC version '#{hmc_version}'") 
+      
+      if hmc_version.present?
+        $ibm_power_hmc_log.info("Fetched HMC version: #{hmc_version}")
+        self.options = (options || {}).merge(:hmc_version => hmc_version)
+        save
+      end
+    rescue => e
+      $ibm_power_hmc_log.warn("Failed to fetch HMC version: #{e.message}")
+      # Don't fail credential verification if version fetch fails
+    end
+  end
+
+  def hmc_version_from_options
+    (options || {})[:hmc_version]
   end
 
   def self.ems_type
