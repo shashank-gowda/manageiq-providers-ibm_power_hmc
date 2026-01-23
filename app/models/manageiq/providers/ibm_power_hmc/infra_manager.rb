@@ -150,7 +150,6 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
   end
 
   def console_url
-    $ibm_power_hmc_log.info("#{self.class}##{__method__}: Generating console URL for HMC '#{hostname}'")
     dashboard_path = use_new_dashboard? ? "newdashboard" : "dashboard"
     "https://#{hostname}/#{dashboard_path}/"
   end
