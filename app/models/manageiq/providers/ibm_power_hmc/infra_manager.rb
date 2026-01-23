@@ -183,10 +183,11 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     if version_string.match?(/^V\d+R\d+/)
       # IBM format: extract numbers from "V<major>R<minor> <build>"
       # e.g., "V11R1 1110" -> "11.1.1110"
-      match = version_string.match(/V(\d+)R(\d+)\s*(\d+)?/)
-      if match
-        parts = [match[1].to_i, match[2].to_i]
-        parts << match[3].to_i if match[3]
+      version_parts = version_string.match(/V(?<major>\d+)R(?<minor>\d+)\s*(?<micro>\d+)?/)&.named_captures
+      if version_parts
+        version = version_parts.values_at("major", "minor", "micro")
+                               .compact.map(&:to_i).join(".")
+        Gem::Version.new(version)
         Gem::Version.new(parts.join("."))
       else
         raise ArgumentError, "Invalid IBM HMC version format: #{version_string}"
