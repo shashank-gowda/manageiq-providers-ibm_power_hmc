@@ -213,15 +213,7 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
       sp_part = hmc_console.sp_name if hmc_console.respond_to?(:sp_name)
       
       # Combine both parts to form complete version (e.g., "V11R1 1110")
-      hmc_version = if version_part.present? && sp_part.present?
-                      "#{version_part} #{sp_part}"
-                    elsif version_part.present?
-                      $ibm_power_hmc_log.warn("#{self.class}##{__method__}: SP part missing, using version part only")
-                      version_part
-                    elsif sp_part.present?
-                      $ibm_power_hmc_log.warn("#{self.class}##{__method__}: Version part missing, using SP part only")
-                      sp_part
-                    end
+      hmc_version = [version_part, sp_part].join(" ")
       $ibm_power_hmc_log.info("#{self.class}##{__method__}: Fetched HMC version '#{hmc_version}'") 
       
       if hmc_version.present?
