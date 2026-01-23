@@ -188,7 +188,6 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
         version = version_parts.values_at("major", "minor", "build")
                                .compact.map(&:to_i).join(".")
         Gem::Version.new(version)
-        Gem::Version.new(parts.join("."))
       else
         raise ArgumentError, "Invalid IBM HMC version format: #{version_string}"
       end
