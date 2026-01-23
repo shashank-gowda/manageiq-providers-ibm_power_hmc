@@ -183,9 +183,9 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     if version_string.match?(/^V\d+R\d+/)
       # IBM format: extract numbers from "V<major>R<minor> <build>"
       # e.g., "V11R1 1110" -> "11.1.1110"
-      version_parts = version_string.match(/V(?<major>\d+)R(?<minor>\d+)\s*(?<micro>\d+)?/)&.named_captures
+      version_parts = version_string.match(/V(?<major>\d+)R(?<minor>\d+)\s*(?<build>\d+)?/)&.named_captures
       if version_parts
-        version = version_parts.values_at("major", "minor", "micro")
+        version = version_parts.values_at("major", "minor", "build")
                                .compact.map(&:to_i).join(".")
         Gem::Version.new(version)
         Gem::Version.new(parts.join("."))
