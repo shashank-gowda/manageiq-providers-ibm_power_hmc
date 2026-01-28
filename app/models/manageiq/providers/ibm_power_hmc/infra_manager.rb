@@ -155,28 +155,27 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     "https://#{hostname}/#{dashboard_path}/"
   end
 
-def update_dashboard_capability
-  hmc_version_string = hmc_version_from_options
-  if hmc_version_string.present?
-    begin
-      current_version = parse_hmc_version(hmc_version_string)
-      threshold_version = parse_hmc_version("V10R2 1020")
-      legacy_dashboard = current_version <= threshold_version
-    rescue ArgumentError
-      $ibm_power_hmc_log.warn("Failed to parse HMC version '#{hmc_version_string}' for dashboard comparison")
+  def update_dashboard_capability
+    if api_version.present?
+      begin
+        current_version = parse_hmc_version(api_version)
+        threshold_version = parse_hmc_version("V10R2 1020")
+        legacy_dashboard = current_version <= threshold_version
+      rescue ArgumentError
+        $ibm_power_hmc_log.warn("Failed to parse HMC version '#{hmc_version_string}' for dashboard comparison")
+        legacy_dashboard = true
+      end
+    else
       legacy_dashboard = true
     end
-  else
-    legacy_dashboard = true
+    # Store in capabilities hash
+    self.capabilities = (capabilities || {}).merge(:legacy_dashboard => legacy_dashboard)
+    save! if changed?
   end
-  # Store in capabilities hash
-  self.capabilities = (capabilities || {}).merge(:legacy_dashboard => legacy_dashboard)
-  save! if changed?
-end
 
   def use_legacy_dashboard?
-   # Simply read from cached capabilities
-   !!capabilities["legacy_dashboard"]
+    # Simply read from cached capabilities
+    !!capabilities["legacy_dashboard"]
   end
   
   def parse_hmc_version(version_string)
@@ -226,10 +225,6 @@ end
       $ibm_power_hmc_log.warn("Failed to fetch HMC version: #{e.message}")
       # Don't fail credential verification if version fetch fails
     end
-  end
-
-  def hmc_version_from_options
-    api_version
   end
 
   def self.ems_type
