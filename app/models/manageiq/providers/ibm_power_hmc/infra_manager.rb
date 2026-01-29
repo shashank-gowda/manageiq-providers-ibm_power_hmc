@@ -177,15 +177,13 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     # Simply read from cached capabilities
     !!capabilities["legacy_dashboard"]
   end
-  
+
   def parse_hmc_version(version_string)
     # Handle IBM HMC version formats:
     # - Numeric: "10.2.1030.0" -> [10, 2, 1030, 0]
     # - IBM format: "V11R1 1110" -> [11, 1, 1110]
     # - IBM format: "V10R2 1020" -> [10, 2, 1020]
-    
     version_string = version_string.to_s.strip
-    
     if version_string.match?(/^V\d+R\d+/)
       # IBM format: extract numbers from "V<major>R<minor> <build>"
       # e.g., "V11R1 1110" -> "11.1.1110"
@@ -205,18 +203,16 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
 
   def fetch_and_store_hmc_version(connection)
     return unless connection
+
     begin
       hmc_console = connection.management_console
-      
       # HMC version is split across two attributes:
       # - hmc_console.version contains release (e.g., "V11R1")
       # - hmc_console.sp_name contains service pack/build (e.g., "1110")
       version_part = hmc_console.version
       sp_part = hmc_console.sp_name
-      
       # Combine both parts to form complete version (e.g., "V11R1 1110")
       hmc_version = [version_part, sp_part].join(" ")
-      
       if hmc_version.present?
         self.api_version = hmc_version
         save! if changed?

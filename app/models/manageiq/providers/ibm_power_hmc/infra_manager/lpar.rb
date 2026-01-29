@@ -20,7 +20,7 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::Lpar < ManageIQ::Providers
 
   def console_url
     if ext_management_system.use_legacy_dashboard?
-       # Old dashboard format: /dashboard/#resources/systems/{sys_uuid}/logical-partitions
+      # Old dashboard format: /dashboard/#resources/systems/{sys_uuid}/logical-partitions
       URI::HTTPS.build(:host => ext_management_system.hostname, :path => "/dashboard/", :fragment => "resources/systems/#{host.ems_ref}/logical-partitions")
     else
       # New dashboard format: /newdashboard/systems/{sys_uuid}/partitions
