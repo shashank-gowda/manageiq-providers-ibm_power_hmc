@@ -128,7 +128,7 @@ describe ManageIQ::Providers::IbmPowerHmc::InfraManager do
       it "handles greater than or equal comparisons" do
         v11 = ems.parse_hmc_version("V11R1 1110")
         v10 = ems.parse_hmc_version("V10R2 1020")
-        threshold = ems.parse_hmc_version("V10R2 1020") 
+        threshold = ems.parse_hmc_version("V10R2 1020")
         expect(v11 >= threshold).to be true
         expect(v10 >= threshold).to be true
         expect(v10 > threshold).to be false
