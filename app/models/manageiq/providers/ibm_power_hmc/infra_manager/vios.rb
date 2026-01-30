@@ -5,7 +5,13 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::Vios < ManageIQ::Providers
   end
 
   def console_url
-    URI::HTTPS.build(:host => ext_management_system.hostname, :path => "/dashboard/", :fragment => "resources/systems/#{host.ems_ref}/virtual-i-o-servers")
+    if ext_management_system.use_legacy_dashboard?
+      # Old dashboard format: /dashboard/#resources/systems/{sys_uuid}/virtual-i-o-servers
+      URI::HTTPS.build(:host => ext_management_system.hostname, :path => "/dashboard/", :fragment => "resources/systems/#{host.ems_ref}/virtual-i-o-servers")
+    else
+      # New dashboard format: /newdashboard/systems/{sys_uuid}/virtualioservers
+      URI::HTTPS.build(:host => ext_management_system.hostname, :path => "/newdashboard/systems/#{host.ems_ref}/virtualioservers")
+    end
   end
 
   def poweron(params = {})
