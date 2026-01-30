@@ -184,6 +184,10 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     # - IBM format: "V11R1 1110" -> [11, 1, 1110]
     # - IBM format: "V10R2 1020" -> [10, 2, 1020]
     version_string = version_string.to_s.strip
+    
+    # Validate input is not empty
+    raise ArgumentError, "Invalid IBM HMC version format: empty string" if version_string.empty?
+    
     if version_string.match?(/^V\d+R\d+/)
       # IBM format: extract numbers from "V<major>R<minor> <build>"
       # e.g., "V11R1 1110" -> "11.1.1110"
@@ -197,7 +201,16 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
       end
     else
       # Standard numeric format: "10.2.1030.0"
-      Gem::Version.new(version_string)
+      # Validate that it only contains digits and dots
+      unless version_string.match?(/^\d+(\.\d+)*$/)
+        raise ArgumentError, "Invalid IBM HMC version format: #{version_string}"
+      end
+      
+      begin
+        Gem::Version.new(version_string)
+      rescue ArgumentError => e
+        raise ArgumentError, "Invalid IBM HMC version format: #{e.message}"
+      end
     end
   end
 
