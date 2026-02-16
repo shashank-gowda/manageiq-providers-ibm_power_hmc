@@ -539,7 +539,7 @@ class ManageIQ::Providers::IbmPowerHmc::Inventory::Parser::InfraManager < Manage
       :read_only    => true
     )
 
-    if lpar.respond_to?("srr")
+    if lpar.kind_of?(IbmPowerHmc::LogicalPartition)
       persister.vms_and_templates_advanced_settings.build(
         :resource     => vm,
         :name         => 'srr_capable',
