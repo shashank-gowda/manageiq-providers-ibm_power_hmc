@@ -133,7 +133,7 @@ describe ManageIQ::Providers::IbmPowerHmc::InfraManager::Refresher do
       :read_only => true
     )
 
-    setting = host.advanced_settings.find_by(:name => "is_mem_mirroring_enabled")
+    setting = host.advanced_settings.find_by(:name => "memory_mirroring_enabled")
     expect(setting).to have_attributes(
       :value     => "false",
       :read_only => true
