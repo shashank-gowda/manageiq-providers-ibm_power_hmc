@@ -6,25 +6,37 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::Vm < ManageIQ::Providers::
 
   supports :capture
 
-  supports :control do
-    _("Host is not HMC-managed") unless host_hmc_managed
+  supports :start do
+    if vm_powered_on?
+      _('The VM is powered on')
+    else
+      unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
+    end
+  end
+
+  supports :stop do
+    if !vm_powered_on?
+      _('The VM is not powered on')
+    else
+      unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
+    end
   end
 
   supports_not :suspend
 
   supports :rename do
-    _("Host is not HMC-managed") unless host_hmc_managed
+    unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
   end
 
   supports :set_description do
-    _("Host is not HMC-managed") unless host_hmc_managed
+    unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
   end
 
   supports :shutdown_guest do
     if !vm_powered_on?
       _("The VM is not powered on")
     else
-      unsupported_reason(:control)
+      unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
     end
   end
 
@@ -32,7 +44,7 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::Vm < ManageIQ::Providers::
     if !vm_powered_on?
       _("The VM is not powered on")
     else
-      unsupported_reason(:control)
+      unsupported_reason(:control) || (_("Host is not HMC-managed") unless host_hmc_managed)
     end
   end
 
