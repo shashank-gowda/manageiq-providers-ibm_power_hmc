@@ -9,7 +9,7 @@ gemspec
 # your gem to rubygems.org.
 
 # Override ibm_power_hmc gem with GitHub repository version
-gem "ibm_power_hmc", "~> 0.28.0", git: "https://github.com/shashank-gowda/ibm_power_hmc_sdk_ruby.git", glob: "gems/ibm_power_hmc/*.gemspec"
+gem "ibm_power_hmc", "~> 0.28.0", git: "https://github.com/shashank-gowda/ibm_power_hmc_sdk_ruby.git", :branch => "main"
 
 # Load Gemfile with dependencies from manageiq
 eval_gemfile(File.expand_path("spec/manageiq/Gemfile", __dir__))
