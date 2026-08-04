@@ -20,7 +20,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "ibm_power_hmc", "~> 0.28.0"
-  spec.add_dependency "rexml"
 
   spec.add_development_dependency "manageiq-style"
   spec.add_development_dependency "simplecov", ">= 0.21.2"
