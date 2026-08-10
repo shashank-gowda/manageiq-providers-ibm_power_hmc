@@ -41,15 +41,16 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     return if entries.empty?
 
     # ── ONE bulk SELECT for the entire batch ──────────────────────────────────
-    # Fetch only the columns needed for change-detection — message and full_data.
-    # Build a lightweight Hash keyed by prob_uuid (message) → full_data so that
-    # each entry lookup is O(1) with no additional DB hits.
+    # Fetch only the columns needed for upsert decisions — id, message, full_data.
+    # Build a lightweight Hash keyed by prob_uuid (message) whose value is a
+    # two-element array [id, full_data]. This avoids loading all 30+ AR columns
+    # into memory and keeps the lookup payload as small as possible.
     #
     existing_map = EmsEvent
                    .where(:ems_id => @ems.id, :event_type => "ServiceableEvent", :source => "IBM_POWER_HMC")
-                   .pluck(:message, :full_data)
-                   .each_with_object({}) do |(msg, full_data), hash|
-                     hash[msg] = full_data
+                   .pluck(:message, :id, :full_data)
+                   .each_with_object({}) do |(msg, id, full_data), hash|
+                     hash[msg] = [id, full_data]
                    end
 
     entries.each { |entry| upsert_entry(entry, existing_map) }
@@ -63,17 +64,19 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     published = entry["published"]
 
     # ── Mapped columns ────────────────────────────────────────────────────────
-    # message   → Problem UUID (unique identifier for the serviceable event)
+    # message   → Problem UUID + "_" + Problem State (e.g. d8d65290-..._OPEN)
     # host_name → Failing Console MTMS  (machtype-model*serial)
     # vm_name   → Partition Name
-    prob_uuid    = extract_value(sem["problemUuid"])
-    failing_mtms = build_failing_mtms(sem)
-    lpar_name    = extract_value(sem["partitionName"])
+    prob_uuid     = extract_value(sem["problemUuid"])
+    problem_state = extract_value(sem["problemState"])
+    failing_mtms  = build_failing_mtms(sem)
+    lpar_name     = extract_value(sem["partitionName"])
+
 
     sem_data = {
       :problem_uuid         => prob_uuid,
       :problem_number       => sem.dig("problemNumber", "_value"),
-      :problem_state        => sem.dig("problemState", "_value"),
+      :problem_state        => problem_state,
       :event_severity       => sem.dig("eventSeverity", "_value"),
       :reference_code       => sem.dig("referenceCode", "_value"),
       :notification_type    => sem.dig("notificationType", "_value"),
@@ -93,7 +96,7 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
       :source     => "IBM_POWER_HMC",
       :ems_ref    => entry_id,
       :timestamp  => published,
-      :message    => prob_uuid,
+      :message    => "#{prob_uuid}_#{problem_state}",
       :host_name  => failing_mtms,
       :vm_name    => lpar_name,
       :full_data  => sem_data,
@@ -101,11 +104,9 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     }
 
     # O(1) hash lookup — no DB hit
-    existing_full_data = existing_map[prob_uuid]
+    existing_full_data = existing_map[prob_uuid]&.last
 
-    # Always add a new record when there is no existing entry OR when the
-    # event data has changed. Updating in-place is intentionally avoided so
-    # that every state change is preserved as a separate EmsEvent row.
+    # Always add a new record when there is no existing entry OR when the event data has changed.
     if existing_full_data.nil? || existing_full_data != sem_data
       EmsEvent.add_queue('add', @ems.id, event_hash)
     end
