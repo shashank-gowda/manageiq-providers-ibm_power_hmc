@@ -51,21 +51,16 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     # ── Fetch existing events from the ManageIQ REST API ─────────────────────
     # Scoped to this EMS (ems_id filter) and paginated to cover all records.
     api_resources = fetch_api_event_streams
-    $ibm_power_hmc_log.info("ServiceableEventPoller: REST API returned #{api_resources.size} resource(s) for ems_id=#{@ems.id}")
-    $ibm_power_hmc_log.debug("ServiceableEventPoller: api_resources = #{api_resources.inspect}")
 
     # Build a Set of known message keys from the API response.
     # Presence of "#{prob_uuid}_#{problem_state}" means the record already exists.
     api_message_keys = api_resources.each_with_object(Set.new) do |resource, set|
       set << resource["message"] if resource["message"]
     end
-    $ibm_power_hmc_log.info("ServiceableEventPoller: api_message_keys contains #{api_message_keys.size} unique key(s)")
 
     # Retire any pending keys that are now confirmed visible in the API —
     # they have been persisted and no longer need in-memory protection.
-    before_size = @pending_keys.size
     @pending_keys.subtract(api_message_keys)
-    $ibm_power_hmc_log.debug("ServiceableEventPoller: @pending_keys retired #{before_size - @pending_keys.size} key(s), #{@pending_keys.size} still pending")
 
     new_count     = 0
     skipped_count = 0
@@ -138,17 +133,14 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     #   3. queued_keys      — queued earlier in this same batch (intra-batch duplicate).
     # Returns true if queued (new), false if skipped.
     message_key = "#{prob_uuid}_#{problem_state}"
-    $ibm_power_hmc_log.debug("ServiceableEventPoller: checking message_key=#{message_key.inspect}")
 
     if api_message_keys.include?(message_key) ||
        @pending_keys.include?(message_key)    ||
        queued_keys.include?(message_key)
-      $ibm_power_hmc_log.debug("ServiceableEventPoller: skipping duplicate message_key=#{message_key.inspect}")
       false
     else
-      queued_keys      << message_key
-      @pending_keys    << message_key
-      $ibm_power_hmc_log.info("ServiceableEventPoller: queuing new entry for message_key=#{message_key.inspect}")
+      queued_keys   << message_key
+      @pending_keys << message_key
       EmsEvent.add_queue('add', @ems.id, event_hash)
       true
     end
@@ -179,8 +171,6 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
         ]
       )
 
-      $ibm_power_hmc_log.info("ServiceableEventPoller: calling REST API — #{uri}")
-
       req           = Net::HTTP::Get.new(uri)
       req["Accept"] = "application/json"
 
@@ -189,7 +179,6 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE unless validate_ssl
         http.request(req)
       end
-      $ibm_power_hmc_log.info("ServiceableEventPoller: REST API responded with HTTP #{response.code} (offset=#{offset})")
 
       data      = JSON.parse(response.body)
       page      = data["resources"] || []
