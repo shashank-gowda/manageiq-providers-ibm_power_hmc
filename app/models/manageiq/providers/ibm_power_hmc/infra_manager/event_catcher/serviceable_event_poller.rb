@@ -175,7 +175,6 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
       offset += page_size
     end
 
-    $ibm_power_hmc_log.info("ServiceableEventPoller: fetched #{all_resources.size} total resource(s) for ems_id=#{@ems.id}")
     all_resources
   rescue => e
     $ibm_power_hmc_log.error("ServiceableEventPoller: REST API call failed — #{e.class}: #{e.message}")
