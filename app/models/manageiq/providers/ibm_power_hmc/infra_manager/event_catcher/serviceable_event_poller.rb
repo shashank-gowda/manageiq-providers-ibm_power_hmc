@@ -1,3 +1,6 @@
+require 'net/http'
+require 'uri'
+require 'json'
 require_relative '../utility/xml_to_json_transformer'
 
 # Encapsulates the periodic polling of IBM HMC Serviceable Events.
@@ -11,8 +14,13 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
   POLL_INTERVAL = 600 # seconds between successive serviceable-event fetches
 
   def initialize(ems)
-    @ems       = ems
-    @last_poll = Time.now.utc.to_i - POLL_INTERVAL
+    @ems          = ems
+    @last_poll    = Time.now.utc.to_i - POLL_INTERVAL
+    # Tracks keys queued in previous poll cycles that may not yet be visible
+    # through the API (e.g. still being processed by the worker queue).
+    # Prevents re-queueing between the moment a record is enqueued and the
+    # moment it becomes visible in the REST API response.
+    @pending_keys = Set.new
   end
 
   # Poll serviceable events if the interval has elapsed.
