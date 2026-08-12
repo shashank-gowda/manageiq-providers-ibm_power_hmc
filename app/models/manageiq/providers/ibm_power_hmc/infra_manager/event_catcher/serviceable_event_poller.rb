@@ -11,7 +11,7 @@ require_relative '../utility/xml_to_json_transformer'
 #   3. Parsing each feed entry and persisting an EmsEvent record via EmsEvent.add_queue.
 #
 class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableEventPoller
-  POLL_INTERVAL = 150 # seconds between successive serviceable-event fetches
+  POLL_INTERVAL = 600 # seconds between successive serviceable-event fetches
 
   def initialize(ems)
     @ems          = ems
