@@ -1,3 +1,6 @@
+require 'net/http'
+require 'uri'
+require 'json'
 require_relative '../utility/xml_to_json_transformer'
 
 # Encapsulates the periodic polling of IBM HMC Serviceable Events.
@@ -8,11 +11,16 @@ require_relative '../utility/xml_to_json_transformer'
 #   3. Parsing each feed entry and persisting an EmsEvent record via EmsEvent.add_queue.
 #
 class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableEventPoller
-  POLL_INTERVAL = 600 # seconds between successive serviceable-event fetches
+  POLL_INTERVAL = 150 # seconds between successive serviceable-event fetches
 
   def initialize(ems)
-    @ems       = ems
-    @last_poll = Time.now.utc.to_i - POLL_INTERVAL
+    @ems          = ems
+    @last_poll    = Time.now.utc.to_i - POLL_INTERVAL
+    # Tracks keys queued in previous poll cycles that may not yet be visible
+    # through the API (e.g. still being processed by the worker queue).
+    # Prevents re-queueing between the moment a record is enqueued and the
+    # moment it becomes visible in the REST API response.
+    @pending_keys = Set.new
   end
 
   # Poll serviceable events if the interval has elapsed.
@@ -40,25 +48,46 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     entries = feed.dig("feed", "entries") || []
     return if entries.empty?
 
-    # ── ONE bulk SELECT for the entire batch ──────────────────────────────────
-    # Fetch only the columns needed for upsert decisions — id, message, full_data.
-    # Build a lightweight Hash keyed by prob_uuid (message) whose value is a
-    # two-element array [id, full_data]. This avoids loading all 30+ AR columns
-    # into memory and keeps the lookup payload as small as possible.
-    #
-    existing_map = EmsEvent
-                   .where(:ems_id => @ems.id, :event_type => "ServiceableEvent", :source => "IBM_POWER_HMC")
-                   .pluck(:message, :id, :full_data)
-                   .each_with_object({}) do |(msg, id, full_data), hash|
-                     hash[msg] = [id, full_data]
-                   end
+    # ── Fetch existing events from the ManageIQ REST API ─────────────────────
+    # Scoped to this EMS (ems_id filter) and paginated to cover all records.
+    api_resources = fetch_api_event_streams
+    $ibm_power_hmc_log.info("ServiceableEventPoller: REST API returned #{api_resources.size} resource(s) for ems_id=#{@ems.id}")
+    $ibm_power_hmc_log.debug("ServiceableEventPoller: api_resources = #{api_resources.inspect}")
 
-    entries.each { |entry| upsert_entry(entry, existing_map) }
+    # Build a Set of known message keys from the API response.
+    # Presence of "#{prob_uuid}_#{problem_state}" means the record already exists.
+    api_message_keys = api_resources.each_with_object(Set.new) do |resource, set|
+      set << resource["message"] if resource["message"]
+    end
+    $ibm_power_hmc_log.info("ServiceableEventPoller: api_message_keys contains #{api_message_keys.size} unique key(s)")
+
+    # Retire any pending keys that are now confirmed visible in the API —
+    # they have been persisted and no longer need in-memory protection.
+    before_size = @pending_keys.size
+    @pending_keys.subtract(api_message_keys)
+    $ibm_power_hmc_log.debug("ServiceableEventPoller: @pending_keys retired #{before_size - @pending_keys.size} key(s), #{@pending_keys.size} still pending")
+
+    new_count     = 0
+    skipped_count = 0
+
+    # queued_keys tracks message keys added during this batch so that duplicate
+    # HMC entries within the same feed are not queued more than once.
+    queued_keys = Set.new
+
+    entries.each do |entry|
+      if upsert_entry(entry, api_message_keys, queued_keys)
+        new_count += 1
+      else
+        skipped_count += 1
+      end
+    end
+
+    $ibm_power_hmc_log.info("ServiceableEventPoller: processed #{entries.size} HMC entries — #{new_count} new queued, #{skipped_count} skipped (already exist)")
   end
 
-  # Process a single feed entry using the pre-fetched lookup.
-  # No DB reads happen here — all decisions are made from the in-memory lookup.
-  def upsert_entry(entry, existing_map)
+  # Process a single feed entry using the pre-fetched API message key set.
+  # No DB reads happen here — presence of the message key means the record exists.
+  def upsert_entry(entry, api_message_keys, queued_keys)
     sem       = entry.dig("content", "ServiceableEvent") || {}
     entry_id  = entry["id"]
     published = entry["published"]
@@ -103,13 +132,80 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
       :ems_id     => @ems.id
     }
 
-    # O(1) hash lookup — no DB hit
-    existing_full_data = existing_map[prob_uuid]&.last
+    # O(1) membership check — skip if the key is known via any of three guards:
+    #   1. api_message_keys — already persisted and visible in the REST API.
+    #   2. @pending_keys    — queued in a previous poll but not yet visible in API.
+    #   3. queued_keys      — queued earlier in this same batch (intra-batch duplicate).
+    # Returns true if queued (new), false if skipped.
+    message_key = "#{prob_uuid}_#{problem_state}"
+    $ibm_power_hmc_log.debug("ServiceableEventPoller: checking message_key=#{message_key.inspect}")
 
-    # Always add a new record when there is no existing entry OR when the event data has changed.
-    if existing_full_data.nil? || existing_full_data != sem_data
+    if api_message_keys.include?(message_key) ||
+       @pending_keys.include?(message_key)    ||
+       queued_keys.include?(message_key)
+      $ibm_power_hmc_log.debug("ServiceableEventPoller: skipping duplicate message_key=#{message_key.inspect}")
+      false
+    else
+      queued_keys      << message_key
+      @pending_keys    << message_key
+      $ibm_power_hmc_log.info("ServiceableEventPoller: queuing new entry for message_key=#{message_key.inspect}")
       EmsEvent.add_queue('add', @ems.id, event_hash)
+      true
     end
+  end
+
+  # Call the ManageIQ REST API to retrieve all ServiceableEvent streams for
+  # this specific EMS, paginating through all pages.
+  #
+  # Base URL is derived from the provider's own hostname — no hardcoding.
+  # Scoping by ems_id ensures events from other providers do not pollute the key set.
+  #
+  # @return [Array] complete list of resource hashes, or [] on error
+  def fetch_api_event_streams
+    base_url  = "https://#{@ems.hostname}"
+    page_size = 500
+    offset    = 0
+    all_resources = []
+
+    loop do
+      uri = URI("#{base_url}/api/event_streams")
+      uri.query = URI.encode_www_form(
+        [
+          ["expand",   "resources"],
+          ["limit",    page_size],
+          ["offset",   offset],
+          ["filter[]", "event_type='ServiceableEvent'"],
+          ["filter[]", "ems_id=#{@ems.id}"]
+        ]
+      )
+
+      $ibm_power_hmc_log.info("ServiceableEventPoller: calling REST API — #{uri}")
+
+      req           = Net::HTTP::Get.new(uri)
+      req["Accept"] = "application/json"
+
+      validate_ssl = @ems.security_protocol == "ssl-no-validation"
+      response     = Net::HTTP.start(uri.host, uri.port, :use_ssl => false) do |http|
+        http.verify_mode = OpenSSL::SSL::VERIFY_NONE unless validate_ssl
+        http.request(req)
+      end
+      $ibm_power_hmc_log.info("ServiceableEventPoller: REST API responded with HTTP #{response.code} (offset=#{offset})")
+
+      data      = JSON.parse(response.body)
+      page      = data["resources"] || []
+      all_resources.concat(page)
+
+      # Stop when the page is smaller than the requested size — no more pages.
+      break if page.size < page_size
+
+      offset += page_size
+    end
+
+    $ibm_power_hmc_log.info("ServiceableEventPoller: fetched #{all_resources.size} total resource(s) for ems_id=#{@ems.id}")
+    all_resources
+  rescue => e
+    $ibm_power_hmc_log.error("ServiceableEventPoller: REST API call failed — #{e.class}: #{e.message}")
+    []
   end
 
   # Extract the plain string value from a transformer node.
