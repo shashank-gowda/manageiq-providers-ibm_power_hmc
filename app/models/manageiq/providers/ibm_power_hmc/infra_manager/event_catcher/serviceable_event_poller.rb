@@ -62,22 +62,11 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     # they have been persisted and no longer need in-memory protection.
     @pending_keys.subtract(api_message_keys)
 
-    new_count     = 0
-    skipped_count = 0
-
     # queued_keys tracks message keys added during this batch so that duplicate
     # HMC entries within the same feed are not queued more than once.
     queued_keys = Set.new
 
-    entries.each do |entry|
-      if upsert_entry(entry, api_message_keys, queued_keys)
-        new_count += 1
-      else
-        skipped_count += 1
-      end
-    end
-
-    $ibm_power_hmc_log.info("ServiceableEventPoller: processed #{entries.size} HMC entries — #{new_count} new queued, #{skipped_count} skipped (already exist)")
+    entries.each { |entry| upsert_entry(entry, api_message_keys, queued_keys) }
   end
 
   # Process a single feed entry using the pre-fetched API message key set.
@@ -131,19 +120,15 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     #   1. api_message_keys — already persisted and visible in the REST API.
     #   2. @pending_keys    — queued in a previous poll but not yet visible in API.
     #   3. queued_keys      — queued earlier in this same batch (intra-batch duplicate).
-    # Returns true if queued (new), false if skipped.
     message_key = "#{prob_uuid}_#{problem_state}"
 
-    if api_message_keys.include?(message_key) ||
-       @pending_keys.include?(message_key)    ||
-       queued_keys.include?(message_key)
-      false
-    else
-      queued_keys   << message_key
-      @pending_keys << message_key
-      EmsEvent.add_queue('add', @ems.id, event_hash)
-      true
-    end
+    return if api_message_keys.include?(message_key) ||
+              @pending_keys.include?(message_key)     ||
+              queued_keys.include?(message_key)
+
+    queued_keys   << message_key
+    @pending_keys << message_key
+    EmsEvent.add_queue('add', @ems.id, event_hash)
   end
 
   # Call the ManageIQ REST API to retrieve all ServiceableEvent streams for
