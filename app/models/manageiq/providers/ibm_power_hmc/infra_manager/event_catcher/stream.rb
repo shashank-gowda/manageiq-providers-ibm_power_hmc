@@ -18,10 +18,10 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Stream
   #   - poll_uom_events        : called every iteration, frequency driven by HMC response time
   #   - poll_serviceable_events: called every iteration but internally throttled to
   #                              once every ServiceableEventPoller::POLL_INTERVAL seconds (600s)
-  def poll(&block)
+  def poll(&)
     @ems.with_provider_connection do |connection|
       until @stop_polling
-        poll_uom_events(connection, &block)
+        poll_uom_events(connection, &)
         poll_serviceable_events(connection)
       end
     end
@@ -30,10 +30,10 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Stream
   private
 
   # Fetches UOM events (ADD_URI, MODIFY_URI, DELETE_URI) from the HMC on every call.
-  def poll_uom_events(connection, &block)
+  def poll_uom_events(connection, &)
     connection.next_events(false)
               .select { |event| event.type.in?(%w[ADD_URI MODIFY_URI DELETE_URI]) }
-              .each(&block)
+              .each(&)
   rescue IbmPowerHmc::Connection::HttpError => err
     $ibm_power_hmc_log.error("querying hmc events failed: #{err}")
   rescue => err
