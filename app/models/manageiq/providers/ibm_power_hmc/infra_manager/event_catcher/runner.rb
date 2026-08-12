@@ -17,6 +17,8 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Runner < Man
     _log.info("#{log_prefix} Caught event [#{event.id}]")
     event_hash = ManageIQ::Providers::IbmPowerHmc::InfraManager::EventParser.event_to_hash(event, @cfg[:ems_id])
     EmsEvent.add_queue('add', @cfg[:ems_id], event_hash)
+    custom_event_hash = ManageIQ::Providers::IbmPowerHmc::InfraManager::EventParser.custom_event(event, @cfg[:ems_id])
+    EmsEvent.add_queue('add', @cfg[:ems_id], custom_event_hash) unless custom_event_hash.nil?
   end
 
   private

@@ -1,7 +1,20 @@
 :ems:
   :ems_ibm_power_hmc:
-    :api_request_timeout: 60
+    :api_request_timeout: 600
+    :delete_inventory_on_provider_remove: true
     :blacklisted_event_names: []
+    :modify_uri_attribute_overrides:
+      :PartitionState:
+        :values:
+        - error
+        - Open Firmware
+        :suffix: PartitionState
+      :State:
+        :values:
+        - Recovery
+        - Error
+        - Incomplete
+        :suffix: State
     :event_handling:
       :event_groups:
         :addition:
@@ -10,6 +23,8 @@
         :configuration:
           :detail:
           - MODIFY_URI
+          - MODIFY_URI_PartitionState
+          - MODIFY_URI_State
         :deletion:
           :detail:
           - DELETE_URI

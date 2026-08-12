@@ -132,8 +132,8 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
 
   def verify_credentials(_auth_type = nil, _options = {})
     begin
-      connection = connect(:validate => true)
-      fetch_and_store_hmc_version(connection)
+      connect(:validate => true)
+      fetch_and_store_hmc_version
       update_dashboard_capability
     rescue => err
       raise MiqException::MiqInvalidCredentialsError, err.message
@@ -242,11 +242,9 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
     end
   end
 
-  def fetch_and_store_hmc_version(connection)
-    return unless connection
-
-    begin
-      hmc_console = connection.management_console
+  def fetch_and_store_hmc_version
+    with_provider_connection do |conn|
+      hmc_console = conn.management_console
       # HMC version is split across two attributes:
       # - hmc_console.version contains release (e.g., "V11R1")
       # - hmc_console.sp_name contains service pack/build (e.g., "1110")
@@ -258,10 +256,10 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
         self.api_version = hmc_version
         save! if changed?
       end
-    rescue => e
-      $ibm_power_hmc_log.warn("Failed to fetch HMC version: #{e.message}")
-      # Don't fail credential verification if version fetch fails
     end
+  rescue => e
+    $ibm_power_hmc_log.warn("Failed to fetch HMC version: #{e.message}")
+    # Don't fail credential verification if version fetch fails
   end
 
   def self.ems_type
@@ -274,5 +272,13 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager < ManageIQ::Providers::Infr
 
   def self.catalog_types
     {"ibm_power_hmc" => N_("IBM Power HMC")}
+  end
+
+  def orchestrate_destroy(task_id = nil)
+    if Settings.ems.ems_ibm_power_hmc.delete_inventory_on_provider_remove
+      VmOrTemplate.where(:ems_id => id).find_each(&:destroy)
+      Host.where(:ems_id => id).find_each(&:destroy)
+    end
+    super
   end
 end
