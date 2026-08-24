@@ -48,7 +48,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::Vm::Reconfigure
   end
 
   def ibmi_partition?(lpar)
-    lpar.respond_to?(:type) && (lpar.type.to_s == "OS400")
+    lpar.try(:type) == "OS400"
   end
 
   def build_memory_config_spec(lpar, spec, options)
