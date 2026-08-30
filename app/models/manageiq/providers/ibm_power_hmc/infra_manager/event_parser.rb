@@ -67,7 +67,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::EventParser
   end
   
   def self.custom_event(event, ems_id)
-    return nil if event.detail.include?('"messageID":"FCS.0021"')
+    return nil if event.detail&.include?('"messageID":"FCS.0021"')
     
     return nil unless event.type == "MODIFY_URI"
 
