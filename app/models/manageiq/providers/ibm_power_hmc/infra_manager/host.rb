@@ -142,10 +142,8 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::Host < ::Host
       end
     when "net_usage_rate_average"
       s = sample.dig("serverUtil", "network")
-      if s
-        net_usage_rate_average_server(s) +
-          net_usage_rate_average_all_vios(sample)
-      end
+      server_net = s ? net_usage_rate_average_server(s) : 0.0
+      server_net + net_usage_rate_average_all_vios(sample)
     end
   end
 end

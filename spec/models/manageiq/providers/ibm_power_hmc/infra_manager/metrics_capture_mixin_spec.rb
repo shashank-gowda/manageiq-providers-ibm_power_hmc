@@ -224,6 +224,7 @@ describe ManageIQ::Providers::IbmPowerHmc::InfraManager::MetricsCaptureMixin do
   it "safe_rate" do
     expect(@test_obj.safe_rate(5.0, 10.0)).to eq 50.0
     expect(@test_obj.safe_rate(5.0, 0.0)).to be_nil
+    expect(@test_obj.safe_rate(0.03027, 0.2)).to be_within(0.001).of(15.135)  # sub-1.0 denominator must not be treated as zero
   end
 
   it "interpolate_samples" do
