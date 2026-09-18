@@ -210,15 +210,15 @@ describe ManageIQ::Providers::IbmPowerHmc::InfraManager::MetricsCaptureMixin do
   end
 
   it "net_usage_rate_average" do
-    expect(@test_obj.net_usage_rate_average(network_data)).to eq 1.5
+    expect(@test_obj.net_usage_rate_average(network_data)).to eq 45.0
   end
 
   it "net_usage_rate_average_server" do
-    expect(@test_obj.net_usage_rate_average_server(network_data_host["serverUtil"]["network"])).to eq 8.0
+    expect(@test_obj.net_usage_rate_average_server(network_data_host["serverUtil"]["network"])).to eq 240.0
   end
 
   it "net_usage_rate_average_all_vios" do
-    expect(@test_obj.net_usage_rate_average_all_vios(network_data_host)).to eq 3.0
+    expect(@test_obj.net_usage_rate_average_all_vios(network_data_host)).to eq 90.0
   end
 
   it "safe_rate" do
