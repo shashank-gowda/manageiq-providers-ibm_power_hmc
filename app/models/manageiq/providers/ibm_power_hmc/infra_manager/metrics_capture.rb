@@ -31,7 +31,7 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::MetricsCapture < ManageIQ:
       :counter_key           => "net_usage_rate_average",
       :instance              => "",
       :capture_interval      => "20",
-      :precision             => 2,
+      :precision             => 1,
       :rollup                => "average",
       :unit_key              => "kilobytespersecond",
       :capture_interval_name => "realtime"

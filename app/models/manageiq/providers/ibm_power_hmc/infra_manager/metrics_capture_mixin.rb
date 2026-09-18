@@ -54,7 +54,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::MetricsCaptureMixin
         adapter["transferredBytes"].sum
       end
     end
-    usage / SAMPLE_DURATION / 1.0.kilobyte
+    usage / 1.0.kilobyte
   end
 
   def net_usage_rate_average_server(sample)
@@ -65,7 +65,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::MetricsCaptureMixin
         end
       end
     end
-    usage / SAMPLE_DURATION / 1.0.kilobyte
+    usage / 1.0.kilobyte
   end
 
   def net_usage_rate_average_all_vios(sample)
