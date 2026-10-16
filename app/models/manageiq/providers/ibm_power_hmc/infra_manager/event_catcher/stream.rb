@@ -1,7 +1,8 @@
 class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Stream
-  def initialize(ems, _options = {})
+  def initialize(ems, options = {})
     @ems                = ems
     @stop_polling       = false
+    @options            = options
     @serviceable_poller = serviceable_event_poller
   end
 
@@ -21,8 +22,9 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Stream
   def poll(&)
     @ems.with_provider_connection do |connection|
       until @stop_polling
-        poll_uom_events(connection, &)
+        events = poll_uom_events(connection, &)
         poll_serviceable_events(connection)
+        sleep(@options[:poll_sleep]) if events.blank?
       end
     end
   end
@@ -31,13 +33,15 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::Stream
 
   # Fetches UOM events (ADD_URI, MODIFY_URI, DELETE_URI) from the HMC on every call.
   def poll_uom_events(connection, &)
-    connection.next_events(false)
-              .select { |event| event.type.in?(%w[ADD_URI MODIFY_URI DELETE_URI]) }
-              .each(&)
+    events = connection.next_events(false).select { |event| event.type.in?(%w[ADD_URI MODIFY_URI DELETE_URI]) }
+    events.each(&)
+    events
   rescue IbmPowerHmc::Connection::HttpError => err
     $ibm_power_hmc_log.error("querying hmc events failed: #{err}")
+    []
   rescue => err
     $ibm_power_hmc_log.error("#{err.class}: #{err.message}")
+    []
   end
 
   # Delegates to ServiceableEventPoller — no-op if POLL_INTERVAL has not elapsed.
