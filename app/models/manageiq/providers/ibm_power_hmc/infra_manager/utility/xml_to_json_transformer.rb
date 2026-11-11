@@ -8,7 +8,7 @@ require "rexml/document"
 #   json  = JSON.generate(hash)
 #
 module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
-  # ── Public entry points ───────────────────────────────────────────────────
+  # -- Public entry points ---------------------------------------------------
 
   # Transform a raw XML string into a JSON-serialisable Hash.
   #
@@ -19,11 +19,11 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
     build_hash(root)
   end
 
-  # ── Private helpers ───────────────────────────────────────────────────────
+  # -- Private helpers -------------------------------------------------------
 
   # Parse the XML string and return the root REXML::Element.
   # @raise [REXML::ParseException] on malformed XML
-  private_class_method def self.parse_xml(xml_text)
+  def self.parse_xml(xml_text)
     doc = REXML::Document.new(xml_text)
     doc.root
   end
@@ -34,11 +34,11 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
   #   - XML-namespace prefixes are stripped from tag names and attribute keys.
   #   - Attributes are stored under "_attr" (only when non-empty).
   #   - Multiple sibling elements with the same local tag become an Array.
-  #   - A leaf element with no children and no attributes → its text (String) or nil.
+  #   - A leaf element with no children and no attributes -> its text (String) or nil.
   #
   # @param elem [REXML::Element]
   # @return [Hash]  { local_tag_name => value }
-  private_class_method def self.elem_to_hash(elem)
+  def self.elem_to_hash(elem)
     tag = strip_ns(elem.name)
 
     children = elem.elements.to_a
@@ -48,7 +48,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
     elem.attributes.each { |name, val| attrs[strip_ns(name)] = val }
     attrs.reject! { |k, _v| k.start_with?("xmlns") }
 
-    # ── Leaf node ──────────────────────────────────────────────────────────
+    # -- Leaf node ----------------------------------------------------------
     if children.empty?
       value =
         if attrs.any?
@@ -59,7 +59,7 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
       return {tag => value}
     end
 
-    # ── Node with children ─────────────────────────────────────────────────
+    # -- Node with children -------------------------------------------------
     child_hash = {}
     children.each do |child|
       child_result = elem_to_hash(child) # {child_tag => value}
@@ -78,8 +78,8 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
     {tag => child_hash}
   end
 
-  # Build the top-level { "feed" => … } hash from the <feed> root element.
-  private_class_method def self.build_hash(root)
+  # Build the top-level { "feed" => ... } hash from the <feed> root element.
+  def self.build_hash(root)
     feed_attrs = {}
     root.attributes.each { |name, val| feed_attrs[strip_ns(name)] = val }
     feed_attrs.reject! { |k, _v| k.start_with?("xmlns") }
@@ -106,9 +106,11 @@ module ManageIQ::Providers::IbmPowerHmc::InfraManager::XmlToJsonTransformer
     {"feed" => result}
   end
 
-  # Strip XML namespace prefix: "{http://...}tag"  →  "tag"
-  #                             "ns:tag"            →  "tag"
-  private_class_method def self.strip_ns(name)
+  # Strip XML namespace prefix: "{http://...}tag"  ->  "tag"
+  #                             "ns:tag"            ->  "tag"
+  def self.strip_ns(name)
     name.to_s.sub(/\A\{[^}]+\}/, "").sub(/\A[^:]+:/, "")
   end
+
+  private_class_method :parse_xml, :elem_to_hash, :build_hash, :strip_ns
 end
