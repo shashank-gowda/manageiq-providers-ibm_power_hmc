@@ -49,14 +49,17 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
     return if entries.empty?
 
     # ── ONE bulk SELECT for the entire batch ──────────────────────────────────
-    # Fetch the message column for all already-persisted ServiceableEvents for
-    # this EMS.  Build a Set for O(1) membership checks — if the composite key
-    # "prob_uuid_problem_state" is already present the event already exists and
-    # must not be re-queued.
-    existing_keys = EmsEvent
-                    .where(:ems_id => @ems.id, :event_type => "ServiceableEvent", :source => "IBM_POWER_HMC")
-                    .pluck(:message)
-                    .to_set
+    # Fetch message + last_reported_timestamp for all already-persisted
+    # ServiceableEvents for this EMS.  The first level is the composite key
+    # "prob_uuid_problem_state" (message); the second level is the set of
+    # last_reported_timestamp values already stored for that message.  An event
+    # already exists only when BOTH match, so a change of only
+    # lastReportedTimestamp upstream is detected as a new version.
+    # message => Set of timestamp keys already stored
+    existing_keys = Hash.new { |h, k| h[k] = Set.new }
+    EmsEvent.where(:ems_id => @ems.id, :event_type => "ServiceableEvent", :source => "IBM_POWER_HMC")
+            .pluck(:message, :last_reported_timestamp)
+            .each { |msg, ts| existing_keys[msg] << ts_key(ts) }
 
     entries.each { |entry| upsert_entry(entry, existing_keys) }
   end
@@ -113,23 +116,42 @@ class ManageIQ::Providers::IbmPowerHmc::InfraManager::EventCatcher::ServiceableE
       :service_history           => sem.dig("serviceHistoryData", "ServiceHistory")
     }
 
+    # lastReportedTimestamp is epoch milliseconds, stored as an integer in
+    # event_streams.last_reported_timestamp.
+    last_reported = parse_epoch_ms(sem["lastReportedTimestamp"])
+
     event_hash = {
-      :event_type => "ServiceableEvent",
-      :source     => "IBM_POWER_HMC",
-      :ems_ref    => entry_id,
-      :timestamp  => published,
-      :message    => "#{prob_uuid}_#{problem_state}",
-      :host_name  => failing_mtms,
-      :vm_name    => lpar_name,
-      :full_data  => sem_data,
-      :ems_id     => @ems.id
+      :event_type              => "ServiceableEvent",
+      :source                  => "IBM_POWER_HMC",
+      :ems_ref                 => entry_id,
+      :timestamp               => published,
+      :last_reported_timestamp => last_reported,
+      :message                 => "#{prob_uuid}_#{problem_state}",
+      :host_name               => failing_mtms,
+      :vm_name                 => lpar_name,
+      :full_data               => sem_data,
+      :ems_id                  => @ems.id
     }
 
-    # O(1) set membership check — no DB hit.
-    # The composite key "prob_uuid_problem_state" uniquely identifies the event
-    # at a given state; if it is absent the event is new and must be queued.
+    # In-memory check — no DB hit.  First level: message
+    # ("prob_uuid_problem_state"); second level: last_reported_timestamp.
     message_key = "#{prob_uuid}_#{problem_state}"
-    EmsEvent.add_queue('add', @ems.id, event_hash) unless existing_keys.include?(message_key)
+    ts          = ts_key(last_reported)
+    return if existing_keys.key?(message_key) && existing_keys[message_key].include?(ts)
+
+    EmsEvent.add_queue('add', @ems.id, event_hash)
+    existing_keys[message_key] << ts
+  end
+
+  # Canonical string used to compare last_reported_timestamp values.
+  def ts_key(value)
+    value&.to_s
+  end
+
+  # Parse an epoch-milliseconds node into an Integer; nil when absent/invalid.
+  def parse_epoch_ms(node)
+    str = extract_value(node).to_s.strip
+    str.match?(/\A\d+\z/) ? str.to_i : nil
   end
 
   # Extract the plain string value from a transformer node.
